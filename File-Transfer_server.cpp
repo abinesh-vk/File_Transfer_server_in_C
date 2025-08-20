@@ -56,7 +56,7 @@ char* find_boundary(char* buffer, int buffer_size) {
     
     return boundary;
 }
-//receiver gets called two times-1)receiving fil 2)esending form
+//receiver gets called two times-1)receiving file 2)sending form
 void receiver(SOCKET client, char* buffer, int received){
 	//if the file is being sent by the browser
     if (strncmp(buffer, "POST", 4) == 0) {
@@ -101,17 +101,26 @@ void receiver(SOCKET client, char* buffer, int received){
             return;
         }
         printf("Boundary: %s\n", boundary);
-
+        printf("0.1000%s",full_buffer);
         // Find the file part in multipart data
         char boundary_marker[300];
         snprintf(boundary_marker, sizeof(boundary_marker), "--%s", boundary);
-        
         char* file_part_start = strstr( full_buffer+header_end, boundary_marker);
-        if (!file_part_start) {
+        if (!file_part_start){
             printf("File part not found.\n");
-            return;
+            while(!file_part_start){
+            int additional_bytes = recv(client, full_buffer + received, 1000, 0);
+            // printf("0.1000%s",full_buffer);
+    if (additional_bytes > 0) {
+        received += additional_bytes;
+        full_buffer[received] = '\0';
+        file_part_start = strstr(full_buffer + header_end, boundary_marker);
+    }}
+    if(file_part_start)
+    goto ln;
+        return;
         }
-        
+        ln:
         // Move to the next line after boundary
         file_part_start = strstr(file_part_start, "\r\n");
         if (!file_part_start) return;
@@ -174,23 +183,45 @@ void receiver(SOCKET client, char* buffer, int received){
         send(client, response, strlen(response), 0);
     } 
     //if browser doesnt send data ,server sends the form
-	else {
-        printf("Serving upload form...\n");
-        char file_in[] =
-            "HTTP/1.1 200 OK\r\n"
-            "Content-Type: text/html\r\n"
-            "Content-Length: 215\r\n"
-            "\r\n"
-            "<!DOCTYPE html>"
-            "<html><body>"
-            "<h2>Send A file</h2>"
-            "<form method=\"POST\" enctype=\"multipart/form-data\">"
-            "<input type=\"file\" name=\"file\"><br><br>"
-            "<input type=\"submit\" value=\"send\">"
-            "</form>"
-            "</body></html>";
-        send(client, file_in, strlen(file_in), 0);
+else {
+    printf("Serving upload form...\n");
+    
+    const char* html_content = 
+        "<!DOCTYPE html>"
+        "<html><head>"
+        "<meta charset=\"utf-8\">"
+        "<title>Upload File</title>"
+        "</head><body>"
+        "<h2>Send A file</h2>"
+        "<form method=\"POST\" enctype=\"multipart/form-data\">"
+        "<input type=\"file\" name=\"file\" required><br><br>"
+        "<input type=\"submit\" value=\"Upload File\">"
+        "</form>"
+        "<br><a href=\"/\">Back to main menu</a>"
+        "</body></html>";
+    
+    int content_length = strlen(html_content);
+    
+    char response[2048];
+    int response_len = snprintf(response, sizeof(response),
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/html; charset=utf-8\r\n"
+        "Content-Length: %d\r\n"
+        "Connection: close\r\n"
+        "\r\n"
+        "%s", content_length, html_content);
+    
+    //printf("Sending upload form (%d bytes)\n", response_len);
+    
+    int sent = send(client, response, response_len, 0);
+    if (sent == SOCKET_ERROR) {
+        printf("Send failed with error: %d\n", WSAGetLastError());
+    } else {
+        printf("Successfully sent upload form (%d bytes)\n", sent);
     }
+    
+    Sleep(200); // Give time for transmission
+}
 }
 
 void extract_file_name(char *path,char *filename){
@@ -281,8 +312,9 @@ file_sender(client, path_str, mime_type, filename);
 }
 //this function for selecting choices
 void choice_func(SOCKET client) {
-    char ini_buffer[4096];
+    char ini_buffer[12000];
     int ini_bytes = recv(client, ini_buffer, sizeof(ini_buffer) - 1,0);
+    //printf("ini_bytes=%d\n",ini_bytes);
     if (ini_bytes <= 0) {
         return;
     }
