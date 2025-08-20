@@ -101,7 +101,7 @@ void receiver(SOCKET client, char* buffer, int received){
             return;
         }
         printf("Boundary: %s\n", boundary);
-        printf("0.1000%s",full_buffer);
+       // printf("0.1000%s",full_buffer);
         // Find the file part in multipart data
         char boundary_marker[300];
         snprintf(boundary_marker, sizeof(boundary_marker), "--%s", boundary);
